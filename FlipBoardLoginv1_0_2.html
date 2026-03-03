@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FlipBoard — Login</title>
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --card: #12141b;
+      --edge: rgba(255, 255, 255, .10);
+      --edge2: rgba(255, 255, 255, .06);
+      --text: #e8e8ef;
+      --muted: rgba(232, 232, 239, .65);
+      --accent: #3fb1ce;
+      --danger: #ff4d4d;
+      --ok: #4dd285;
+      --warn: #ffd24d;
+
+      --radius: 16px;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .45);
+      --tap: 48px;
+
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      background:
+        radial-gradient(1200px 600px at 20% 0%, rgba(63, 177, 206, .16), transparent 60%),
+        radial-gradient(900px 500px at 80% 100%, rgba(77, 210, 133, .10), transparent 65%),
+        var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 12px 2px;
+      user-select: none;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 6px rgba(63, 177, 206, .15);
+    }
+
+    .brand h1 {
+      font-size: 18px;
+      margin: 0;
+      letter-spacing: .2px;
+      font-weight: 650;
+    }
+
+    .brand small {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255, 255, 255, .03), rgba(255, 255, 255, .02));
+      border: 1px solid var(--edge);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--edge2);
+      background: rgba(0, 0, 0, .20);
+    }
+
+    .tab {
+      flex: 1;
+      height: 56px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 650;
+      letter-spacing: .2px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .tab[aria-selected="true"] {
+      color: var(--text);
+    }
+
+    .tab[aria-selected="true"]::after {
+      content: "";
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 10px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 6px rgba(63, 177, 206, .10);
+    }
+
+    .content {
+      padding: 16px;
+    }
+
+    .banner {
+      display: none;
+      border: 1px solid rgba(255, 77, 77, .35);
+      background: rgba(255, 77, 77, .10);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 12px 12px;
+      margin: 0 0 12px 0;
+      line-height: 1.25;
+    }
+
+    .banner strong {
+      color: #fff;
+    }
+
+    .banner .muted {
+      color: rgba(232, 232, 239, .75);
+      font-size: 12px;
+      display: block;
+      margin-top: 6px;
+    }
+
+    form {
+      display: none;
+      margin: 0;
+    }
+
+    form.active {
+      display: block;
+    }
+
+    .field {
+      margin: 10px 0;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0 0 6px 2px;
+    }
+
+    input {
+      width: 100%;
+      height: var(--tap);
+      border-radius: 12px;
+      border: 1px solid var(--edge);
+      background: rgba(0, 0, 0, .25);
+      color: var(--text);
+      padding: 0 14px;
+      font-size: 16px;
+      outline: none;
+    }
+
+    input::placeholder {
+      color: rgba(232, 232, 239, .35);
+    }
+
+    input:focus {
+      border-color: rgba(63, 177, 206, .65);
+      box-shadow: 0 0 0 4px rgba(63, 177, 206, .18);
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .row .grow {
+      flex: 1;
+    }
+
+    .btn {
+      height: var(--tap);
+      border-radius: 12px;
+      border: 1px solid var(--edge);
+      background: rgba(255, 255, 255, .04);
+      color: var(--text);
+      font-weight: 650;
+      font-size: 15px;
+      cursor: pointer;
+      padding: 0 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-width: 140px;
+    }
+
+    .btn.primary {
+      background: rgba(63, 177, 206, .20);
+      border-color: rgba(63, 177, 206, .55);
+    }
+
+    .btn.primary:hover {
+      background: rgba(63, 177, 206, .24);
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, .06);
+    }
+
+    .btn:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 10px;
+      line-height: 1.35;
+    }
+
+    .hint code {
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 2px 6px;
+      border: 1px solid var(--edge2);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, .25);
+      color: rgba(232, 232, 239, .9);
+    }
+
+    .working {
+      display: none;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .working.active {
+      display: flex;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid rgba(232, 232, 239, .22);
+      border-top-color: rgba(232, 232, 239, .85);
+      animation: spin .9s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .successPanel {
+      display: none;
+      margin-top: 12px;
+      border: 1px solid rgba(77, 210, 133, .35);
+      background: rgba(77, 210, 133, .10);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .successPanel.active {
+      display: block;
+    }
+
+    .successPanel .title {
+      font-weight: 750;
+      margin: 0 0 6px 0;
+    }
+
+    .successPanel a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: var(--tap);
+      padding: 0 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(77, 210, 133, .55);
+      background: rgba(77, 210, 133, .18);
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 700;
+      margin-top: 10px;
+    }
+
+    .successPanel a:focus {
+      outline: none;
+      box-shadow: 0 0 0 4px rgba(77, 210, 133, .18);
+    }
+
+    /* Toasts */
+    .toastHost {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 14px;
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+      padding: 0 14px;
+      z-index: 9999;
+    }
+
+    .toast {
+      pointer-events: auto;
+      max-width: 560px;
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--edge);
+      background: rgba(18, 20, 27, .92);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 16px 45px rgba(0, 0, 0, .45);
+      padding: 12px 12px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      transform: translateY(12px);
+      opacity: 0;
+      transition: transform .18s ease, opacity .18s ease;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast .icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      flex: 0 0 auto;
+      margin-top: 1px;
+    }
+
+    .toast .msg {
+      flex: 1;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .toast .close {
+      border: 0;
+      background: transparent;
+      color: rgba(232, 232, 239, .75);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 4px 8px;
+      margin-top: -2px;
+    }
+
+    .icon.ok {
+      background: rgba(77, 210, 133, .18);
+      border: 1px solid rgba(77, 210, 133, .45);
+    }
+
+    .icon.err {
+      background: rgba(255, 77, 77, .16);
+      border: 1px solid rgba(255, 77, 77, .45);
+    }
+
+    .icon.info {
+      background: rgba(63, 177, 206, .16);
+      border: 1px solid rgba(63, 177, 206, .45);
+    }
+
+    /* Small screens */
+    @media (max-width: 420px) {
+      .content {
+        padding: 14px;
+      }
+
+      .btn {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .row {
+        flex-direction: column;
+      }
+
+      .row .grow {
+        width: 100%;
+      }
+    }
+  
+
+    /* Phase 2 additions */
+    .content { padding: 16px; }
+    .row { display:flex; gap:10px; align-items:center; }
+    .grow { flex:1; }
+    .hidden { display:none !important; }
+
+    .deviceCard {
+      border: 1px solid var(--edge2);
+      background: rgba(0,0,0,.22);
+      border-radius: 14px;
+      padding: 14px;
+      margin-top: 12px;
+    }
+    .deviceCard h3 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      letter-spacing: .2px;
+    }
+    .kv {
+      display:flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--edge2);
+      background: rgba(0,0,0,.18);
+      margin: 8px 0;
+      font-family: var(--mono);
+      font-size: 12px;
+      align-items:center;
+    }
+    .kv .k { color: var(--muted); font-family: var(--sans); font-size: 12px; }
+    .kv .v { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .btnSmall {
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 1px solid var(--edge);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 650;
+    }
+    .btnSmall:hover { border-color: rgba(63,177,206,.55); }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <h1>FlipBoard</h1>
+        <small>Display login (no sign‑up)</small>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="content">
+
+        <div class="banner" id="banner"></div>
+
+        <!-- LOGIN ONLY -->
+        <form id="loginForm" autocomplete="on">
+          <div class="field">
+            <label>Email</label>
+            <input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email" required />
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password" required />
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="loginBtn" type="submit">Log In</button>
+            <button class="ghost" id="logoutBtn" type="button">Log Out</button>
+          </div>
+        </form>
+
+        <!-- DEVICE NOT REGISTERED GATE -->
+        <div id="deviceGate" class="hidden">
+          <div style="margin-top:4px; font-weight:700;">Device not registered</div>
+          <div style="margin-top:6px; color:var(--muted); line-height:1.3;">
+            This FlipBoard device is logged in, but it is not authorized yet. Add the Device ID below in FlipEditor → Devices.
+          </div>
+
+          <div class="deviceCard">
+            <h3>Registration Info</h3>
+            <div class="kv">
+              <div class="k">Account UID (do NOT paste as Device ID)</div>
+              <div class="v grow" id="uidVal">—</div>
+              <button class="btnSmall" type="button" id="copyUidBtn">Copy</button>
+            </div>
+            <div class="kv">
+              <div class="k">Device ID</div>
+              <div class="v grow" id="devVal">—</div>
+              <button class="btnSmall" type="button" id="copyDevBtn">Copy</button>
+            </div>
+            <div style="margin-top:10px; color:var(--muted); font-size:12px;">
+              After adding this device in FlipEditor, return here. This page will auto-continue as soon as the device is registered.
+            </div>
+          </div>
+        </div>
+
+        <details class="debug" open style="margin-top:14px;">
+          <summary>Debug</summary>
+          <pre id="dbgText" style="white-space:pre-wrap; font-family:var(--mono); font-size:12px; margin:10px 0 0 0;"></pre>
+        </details>
+
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Firebase Web SDK v9+ modular (NO compat)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signInWithEmailAndPassword,
+      signOut,
+      setPersistence,
+      browserLocalPersistence
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+    import {
+      getFirestore,
+      doc,
+      getDoc,
+      onSnapshot,
+      updateDoc,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBMeYQiNcfhkFVtmbKAbDnFILfUz3nLY50",
+      authDomain: "flipboard-937e3.firebaseapp.com",
+      databaseURL: "https://flipboard-937e3-default-rtdb.firebaseio.com",
+      projectId: "flipboard-937e3",
+      storageBucket: "flipboard-937e3.firebasestorage.app",
+      messagingSenderId: "926200267004",
+      appId: "1:926200267004:web:1ee00c4d344f670b775779"
+    };
+
+    // ---- Paths (device-scoped) ----
+    const ACCOUNT_COLLECTION = "accounts";
+    const DEVICES_SUBCOL = "devices";
+    const USER_DATA_SUBCOL = "data";
+    const BOARD_DOC_ID = "boardPack";
+    const EVENTS_DOC_ID = "events";
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // ---- Debug logging ----
+    const _dbg = { lines: [], max: 250 };
+    function safeJson(obj) { try { return JSON.stringify(obj); } catch (e) { return '"<unserializable>"'; } }
+    function logStep(tag, msg, data) {
+      const ts = new Date().toISOString();
+      const line = data ? `[${ts}] ${tag} → ${msg} ${safeJson(data)}` : `[${ts}] ${tag} → ${msg}`;
+      _dbg.lines.push(line);
+      if (_dbg.lines.length > _dbg.max) _dbg.lines.splice(0, _dbg.lines.length - _dbg.max);
+      if (data !== undefined) console.log(`[${tag}] ${msg}`, data);
+      else console.log(`[${tag}] ${msg}`);
+      updateDebugPanel();
+    }
+    function updateDebugPanel() {
+      const el = document.getElementById("dbgText");
+      if (!el) return;
+      const user = auth.currentUser;
+      const snapshot = {
+        user: user ? { uid: user.uid, email: user.email } : null,
+        deviceId: getDeviceId(),
+        time: new Date().toISOString()
+      };
+      el.textContent = _dbg.lines.join("\n") + "\n\nSTATE: " + JSON.stringify(snapshot, null, 2);
+    }
+
+    function showBanner(html) {
+      const b = document.getElementById("banner");
+      b.innerHTML = html;
+      b.style.display = "block";
+    }
+    function clearBanner() {
+      const b = document.getElementById("banner");
+      b.innerHTML = "";
+      b.style.display = "none";
+    }
+
+    // ---- Device ID ----
+    function genUuid() {
+      if (crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+      // fallback
+      const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+      return `${s4()}${s4()}-${s4()}-${s4()}-${s4()}-${s4()}${s4()}${s4()}`;
+    }
+
+    function getDeviceId() {
+      const key = "flipboard_deviceId";
+      let id = localStorage.getItem(key);
+      if (!id) {
+        id = genUuid();
+        localStorage.setItem(key, id);
+        logStep("DEVICE", "Generated new deviceId", { deviceId: id });
+      }
+      return id;
+    }
+
+    // ---- UI toggles ----
+    function setGateVisible(on, uid) {
+      document.getElementById("deviceGate").classList.toggle("hidden", !on);
+      document.getElementById("loginForm").classList.toggle("hidden", on);
+      const dev = getDeviceId();
+      document.getElementById("devVal").textContent = dev;
+      document.getElementById("uidVal").textContent = uid || "—";
+    }
+
+    async function copyText(t) {
+      try {
+        await navigator.clipboard.writeText(t);
+        logStep("UI", "Copied to clipboard", { text: t });
+      } catch (e) {
+        logStep("UI", "Clipboard failed (select/copy manually)", { error: String(e) });
+      }
+    }
+
+    document.getElementById("copyUidBtn").addEventListener("click", () => copyText(document.getElementById("uidVal").textContent));
+    document.getElementById("copyDevBtn").addEventListener("click", () => copyText(document.getElementById("devVal").textContent));
+
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      try {
+        await signOut(auth);
+        logStep("AUTH", "Signed out");
+      } catch (e) {
+        logStep("AUTH", "Sign out failed", { error: String(e) });
+      }
+    });
+
+    // ---- Device authorization + redirect ----
+    let _deviceUnsub = null;
+
+    function stopDeviceWatcher() {
+      if (_deviceUnsub) { try { _deviceUnsub(); } catch(_) {} }
+      _deviceUnsub = null;
+    }
+
+    function runtimeUrl() {
+      // local file next to this login page
+      return "flipboardv4_0_2.html";
+    }
+
+    function boardPackRef(uid, deviceId) {
+      return doc(db, ACCOUNT_COLLECTION, uid, DEVICES_SUBCOL, deviceId, USER_DATA_SUBCOL, BOARD_DOC_ID);
+    }
+    function eventsRef(uid, deviceId) {
+      return doc(db, ACCOUNT_COLLECTION, uid, DEVICES_SUBCOL, deviceId, USER_DATA_SUBCOL, EVENTS_DOC_ID);
+    }
+    function deviceRef(uid, deviceId) {
+      return doc(db, ACCOUNT_COLLECTION, uid, DEVICES_SUBCOL, deviceId);
+    }
+
+    async function isDeviceRegistered(uid, deviceId) {
+      const snap = await getDoc(deviceRef(uid, deviceId));
+      return snap.exists();
+    }
+
+    async function markLastSeen(uid, deviceId) {
+      try {
+        await updateDoc(deviceRef(uid, deviceId), { lastSeenAt: serverTimestamp() });
+      } catch (e) {
+        // not fatal
+        logStep("DEVICE", "lastSeen update failed (non-fatal)", { error: String(e) });
+      }
+    }
+
+    function redirectToRuntime() {
+      logStep("NAV", "Redirecting to runtime", { href: runtimeUrl() });
+      window.location.href = runtimeUrl();
+    }
+
+    async function handleAuthedUser(user) {
+      clearBanner();
+      updateDebugPanel();
+
+      const deviceId = getDeviceId();
+      const uid = user.uid;
+
+      // Fast check
+      let registered = false;
+      try {
+        registered = await isDeviceRegistered(uid, deviceId);
+        logStep("DEVICE", "Registration check", { registered, uid, deviceId });
+      } catch (e) {
+        logStep("DEVICE", "Registration check failed", { error: String(e) });
+        showBanner(`<strong>Device check failed.</strong><span class="muted">Check Firestore rules / network.</span>`);
+        return;
+      }
+
+      if (!registered) {
+        setGateVisible(true, uid);
+        logStep("DEVICE", "Device NOT registered — showing gate", { uid, deviceId });
+
+        // Watch the device doc; the moment it appears, continue.
+        stopDeviceWatcher();
+        _deviceUnsub = onSnapshot(deviceRef(uid, deviceId), async (snap) => {
+          if (snap.exists()) {
+            logStep("DEVICE", "Device registered (snapshot). Continuing…", { uid, deviceId });
+            await markLastSeen(uid, deviceId);
+            redirectToRuntime();
+          }
+        }, (err) => {
+          logStep("DEVICE", "Device watch error", { error: String(err) });
+        });
+        return;
+      }
+
+      // registered
+      setGateVisible(false);
+      await markLastSeen(uid, deviceId);
+      redirectToRuntime();
+    }
+
+    // ---- Login submit ----
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearBanner();
+
+      const email = document.getElementById("loginEmail").value.trim();
+      const pass = document.getElementById("loginPass").value;
+
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+        logStep("AUTH", "Persistence set to local");
+      } catch (e) {
+        logStep("AUTH", "Persistence set failed", { error: String(e) });
+      }
+
+      try {
+        logStep("AUTH", "Signing in…", { email });
+        const cred = await signInWithEmailAndPassword(auth, email, pass);
+        logStep("AUTH", "Signed in", { uid: cred.user.uid, email: cred.user.email });
+        // onAuthStateChanged will handle redirect/device gate
+      } catch (err) {
+        logStep("AUTH", "Login failed", { code: err?.code, message: err?.message });
+        showBanner(`<strong>Login failed.</strong><span class="muted">${err?.message || "Unknown error"}</span>`);
+      }
+    });
+
+    // ---- Auth state ----
+    onAuthStateChanged(auth, (user) => {
+      updateDebugPanel();
+      stopDeviceWatcher();
+
+      if (!user) {
+        logStep("AUTH", "No session. Showing login.");
+        setGateVisible(false);
+        return;
+      }
+
+      logStep("AUTH", "Session active", { uid: user.uid, email: user.email });
+      handleAuthedUser(user);
+    });
+
+    updateDebugPanel();
+  </script>
+</body>
+</html>
