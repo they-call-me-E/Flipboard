@@ -29,7 +29,7 @@
       box-sizing: border-box;
     }
 
-    html,
+    ,
     body {
       height: 100%;
     }
@@ -600,9 +600,9 @@
       el.textContent = _dbg.lines.join("\n") + "\n\nSTATE: " + JSON.stringify(snapshot, null, 2);
     }
 
-    function showBanner(html) {
+    function showBanner() {
       const b = document.getElementById("banner");
-      b.innerHTML = html;
+      b.inner = html;
       b.style.display = "block";
     }
     function clearBanner() {
@@ -670,7 +670,7 @@
 
     function runtimeUrl() {
       // local file next to this login page
-      return "flipboardv4_0_2.html";
+      return "flipboard.html";
     }
 
     function boardPackRef(uid, deviceId) {
