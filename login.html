@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>FlipBoard — Login</title>
+  <title>FlipBoard — Login v1.0.3</title>
   <style>
     :root {
       --bg: #0b0c10;
@@ -29,7 +29,7 @@
       box-sizing: border-box;
     }
 
-    ,
+    html,
     body {
       height: 100%;
     }
@@ -485,7 +485,7 @@
         <div class="banner" id="banner"></div>
 
         <!-- LOGIN ONLY -->
-        <form id="loginForm" autocomplete="on">
+        <form id="loginForm" class="active" autocomplete="on">
           <div class="field">
             <label>Email</label>
             <input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email" required />
@@ -600,9 +600,9 @@
       el.textContent = _dbg.lines.join("\n") + "\n\nSTATE: " + JSON.stringify(snapshot, null, 2);
     }
 
-    function showBanner() {
+    function showBanner(html) {
       const b = document.getElementById("banner");
-      b.inner = html;
+      b.innerHTML = html;
       b.style.display = "block";
     }
     function clearBanner() {
