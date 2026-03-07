@@ -4,7 +4,7 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FlipBoard Runtime v1.0.3 — Split-Flap Board</title>
+<title>FlipBoard Runtime v1.0.21 — Split-Flap Board</title>
 
 <style>
     :root {
@@ -81,6 +81,16 @@
         border-radius: 20%;
         perspective: var(--persp);
         overflow: hidden;
+    }
+
+    /* Keep runtime corners visually identical to the editor preview.
+       Radius must be applied to all animated layers, not just the tile shell. */
+    .tile,
+    .tile .top.static,
+    .tile .bottom.static,
+    .tile .flap.top,
+    .tile .flap.bottom {
+        border-radius: 20%;
     }
 
     .tile::after {
@@ -325,7 +335,6 @@
 
     const BOARD_DOC_ID = "boardPack";
     const EVENTS_DOC_ID = "events";
-    const CALENDAR_DOC_ID = "calendarCache";
 
     const FIELD = "data";
 
@@ -388,7 +397,7 @@
             if (!btn) return;
             const what = btn.getAttribute("data-copy");
             const val = what === "uid" ? uid : deviceId;
-            try { await navigator.clipboard.writeText(val); btn.textContent = "Copied"; setTimeout(()=>btn.textContent="Copy",900); } catch(_) {}
+            try { await navigator.clipboard.writeText(val); btn.textContent = "Copied"; setTimeout(() => btn.textContent = "Copy", 900); } catch (_) { }
         });
         document.body.appendChild(wrap);
         return wrap;
@@ -430,21 +439,11 @@
             const boardRef = doc(db, ACCOUNT_COLLECTION, user.uid, DEVICE_SUBCOL, deviceId, USER_DATA_SUBCOL, BOARD_DOC_ID);
             const eventsRef = doc(db, ACCOUNT_COLLECTION, user.uid, DEVICE_SUBCOL, deviceId, USER_DATA_SUBCOL, EVENTS_DOC_ID);
 
-            // Calendar cache remains global (Cloud Run writes here)
-            const calendarRef = doc(db, DEV_COLLECTION, CALENDAR_DOC_ID);
-
             const parseDoc = (snap, label, which) => {
                 if (!snap.exists()) throw new Error(`Doc not found (${which}:${label}).`);
                 const raw = snap.get(FIELD);
                 if (typeof raw !== "string" || !raw.trim()) throw new Error(`Field "${FIELD}" missing (${which}:${label}).`);
                 return JSON.parse(raw);
-            };
-
-            const parseCalendarDoc = (snap, label) => {
-                if (!snap.exists()) throw new Error(`Doc not found (calendarCache:${label}).`);
-                const obj = snap.data();
-                if (!obj || typeof obj !== "object") throw new Error(`calendarCache invalid (${label}).`);
-                return obj;
             };
 
             async function loadStringFieldDoc(ref, which) {
@@ -470,32 +469,8 @@
                 return parseDoc(snap, "default", which);
             }
 
-            async function loadCalendarCacheDoc(which) {
-                // server
-                try {
-                    const snap = await getDocFromServer(calendarRef);
-                    window.__flipboardLastSource = `firestore:${which}:server`;
-                    return parseCalendarDoc(snap, "server");
-                } catch (e1) {
-                    console.warn(`[FIRESTORE] ${which} server failed, trying CACHE:`, e1?.code || e1?.message || e1);
-                }
-                // cache
-                try {
-                    const snap = await getDocFromCache(calendarRef);
-                    window.__flipboardLastSource = `firestore:${which}:cache`;
-                    return parseCalendarDoc(snap, "cache");
-                } catch (e2) {
-                    console.warn(`[FIRESTORE] ${which} cache failed, trying DEFAULT:`, e2?.code || e2?.message || e2);
-                }
-                // default
-                const snap = await getDoc(calendarRef);
-                window.__flipboardLastSource = `firestore:${which}:default`;
-                return parseCalendarDoc(snap, "default");
-            }
-
             window.loadBoardPack = async () => loadStringFieldDoc(boardRef, "boardPack");
             window.loadEventsPack = async () => loadStringFieldDoc(eventsRef, "events");
-            window.loadCalendarCache = async () => loadCalendarCacheDoc("calendarCache");
 
             window.subscribeBoardPack = function subscribeBoardPack(cb) {
                 if (typeof cb !== "function") throw new Error("subscribeBoardPack(cb) requires a callback");
@@ -557,7 +532,7 @@
     } else {
         window.__FLIPBOARD_BOOTED = true;
 
-        const RUNTIME_VERSION = "1.0.3";
+        const RUNTIME_VERSION = "1.0.21";
         console.log(`[RUNTIME] FlipBoard Display v${RUNTIME_VERSION}`);
 
 
@@ -653,9 +628,9 @@
             sessionStorage.setItem(DEBUG_KEY, DEBUG_ENABLED ? "1" : "0");
             applyDebugUI();
 
-        if (URL_DEBUG) {
-            console.log("[DEBUG] ?debug=1 active (startup dump enabled)");
-        }
+            if (URL_DEBUG) {
+                console.log("[DEBUG] ?debug=1 active (startup dump enabled)");
+            }
 
             showDebugToast(DEBUG_ENABLED ? "Debug ON" : "Debug OFF");
         }
@@ -847,7 +822,9 @@
         function presetTokens(payload, pack, board) {
             const tzOff = payload?.timezone_offset;
             const loc = getWeatherConfig(pack, board);
-            const label = cleanText(loc.label || loc.value || "").toUpperCase() || placeholderText();
+            const locKey = makeLocKey(loc);
+            const cachedLoc = locKey ? (weatherCache.get(locKey) || null) : null;
+            const label = cleanText(cachedLoc?.locLabel || loc.label || loc.value || "").toUpperCase() || placeholderText();
 
             const t = roundInt(payload?.current?.temp);
             const f = roundInt(payload?.current?.feels_like);
@@ -1002,32 +979,32 @@
         }
 
         function resolveToken(token, payload, pack, board) {
-        if (token === "DATE_LONG") {
-            const now = new Date();
-            const formatted = now.toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-                year: "numeric"
-            });
-            return formatted.toUpperCase();
-        }
+            if (token === "DATE_LONG") {
+                const now = new Date();
+                const formatted = now.toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric"
+                });
+                return formatted.toUpperCase();
+            }
 
-        if (token === "TIME_12H") {
-            const now = new Date();
-            const formatted = now.toLocaleTimeString(undefined, {
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true
-            });
-            return formatted.toUpperCase();
-        }
+            if (token === "TIME_12H") {
+                const now = new Date();
+                const formatted = now.toLocaleTimeString(undefined, {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true
+                });
+                return formatted.toUpperCase();
+            }
 
-        if (token === "TIME_24H") {
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, "0");
-            const minutes = String(now.getMinutes()).padStart(2, "0");
-            return `${hours}:${minutes}`;
-        }
+            if (token === "TIME_24H") {
+                const now = new Date();
+                const hours = String(now.getHours()).padStart(2, "0");
+                const minutes = String(now.getMinutes()).padStart(2, "0");
+                return `${hours}:${minutes}`;
+            }
 
             const raw = token.trim();
 
@@ -1576,114 +1553,14 @@
         }
 
         /* ============================================================
-           FIRESTORE CALENDAR CACHE STAGES
-           - source: "firestore_calendar_cache"
-           - doc: flipboard/calendarCache
-           - render: boardLayout.lines as-is (no uppercase, no token render)
-           - memo: cached for dwell duration to avoid refetch spam
-        ============================================================ */
-        const __calendarCacheMemo = {
-            expiresAt: 0,
-            promise: null,
-            data: null
-        };
-
-        function calendarFallbackBlock() {
-            return [
-                "CALENDAR",
-                "UNAVAILABLE",
-                "",
-                "",
-                "",
-                "",
-                "",
-                ""
-            ];
-        }
-
-        function dateKeyInTimeZone(date, timeZone) {
-            const parts = new Intl.DateTimeFormat("en-CA", {
-                timeZone,
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit"
-            }).formatToParts(date);
-
-            const y = parts.find(p => p.type === "year")?.value ?? "0000";
-            const m = parts.find(p => p.type === "month")?.value ?? "01";
-            const d = parts.find(p => p.type === "day")?.value ?? "01";
-            return `${y}-${m}-${d}`;
-        }
-
-        // DST-safe date + N days: anchor at 12:00 UTC then format back into tz.
-        function addDaysToDateKey(dateKey, daysToAdd, timeZone) {
-            const [yy, mm, dd] = String(dateKey || "").split("-").map(n => parseInt(n, 10));
-            if (!yy || !mm || !dd) return dateKey;
-            const anchored = new Date(Date.UTC(yy, mm - 1, dd, 12, 0, 0));
-            const shifted = new Date(anchored.getTime() + daysToAdd * 86400000);
-            return dateKeyInTimeZone(shifted, timeZone);
-        }
-
-        async function getCalendarCacheDocCached(dwellMs) {
-            const now = Date.now();
-            const ttl = Math.max(2000, Number(dwellMs) || DEFAULT_DWELL_MS);
-
-            if (__calendarCacheMemo.data && now < __calendarCacheMemo.expiresAt) return __calendarCacheMemo.data;
-            if (__calendarCacheMemo.promise && now < __calendarCacheMemo.expiresAt) return __calendarCacheMemo.promise;
-
-            __calendarCacheMemo.expiresAt = now + ttl;
-
-            __calendarCacheMemo.promise = (async () => {
-                if (typeof window.loadCalendarCache !== "function") {
-                    throw new Error("loadCalendarCache() missing (module loader not ready)");
-                }
-                const data = await window.loadCalendarCache();
-                __calendarCacheMemo.data = data;
-                __calendarCacheMemo.promise = null;
-                return data;
-            })().catch(err => {
-                console.warn("[CALENDAR] load failed:", err);
-                __calendarCacheMemo.data = null;
-                __calendarCacheMemo.promise = null;
-                return null;
-            });
-
-            return __calendarCacheMemo.promise;
-        }
-
-        async function resolveCalendarStageLines(stage, dwellMs) {
-            const docData = await getCalendarCacheDocCached(dwellMs);
-
-            const tz = (docData?.timezone && typeof docData.timezone === "string")
-                ? docData.timezone
-                : "America/New_York";
-
-            const todayKey = dateKeyInTimeZone(new Date(), tz);
-            const which = stage?.calendar?.which || "today";
-            const dateKey = (which === "tomorrow") ? addDaysToDateKey(todayKey, 1, tz) : todayKey;
-
-            const lines = docData?.days?.[dateKey]?.boardLayout?.lines;
-
-            if (!Array.isArray(lines)) {
-                return asRowsNoFormat(calendarFallbackBlock());
-            }
-
-            // Render directly (no formatting), but always adapt to current grid safely.
-            return asRowsNoFormat(lines);
-        }
-
-        /* ============================================================
            WEATHER (per-board location caching)
         ============================================================ */
         let weatherRefreshTimer = null;
         const weatherCache = new Map();
 
         function makeLocKey(cfg) {
-            const type = String(cfg?.type || "").toLowerCase();
-            const value = cleanText(cfg?.value || "");
-            if (!value) return "";
-            const t = (type === "zip" || type === "city_state" || type === "city") ? type : "city";
-            return `${t}:${value}`.toUpperCase();
+            const zip = String(cfg?.value || "").replace(/[^0-9]/g, "").slice(0, 5);
+            return zip.length === 5 ? `ZIP:${zip}` : "";
         }
 
         function shouldRefreshPayload(entry) {
@@ -1692,55 +1569,10 @@
             return age > WEATHER_REFRESH_MS;
         }
 
-        function shouldRefreshGeo(entry, locKey) {
-            if (!entry || entry.locKey !== locKey) return true;
-            if (typeof entry.lat !== "number" || typeof entry.lon !== "number") return true;
-            const age = Date.now() - (entry.geoAt || 0);
-            return age > (24 * 60 * 60 * 1000);
-        }
-
-        async function geocodeCfg(cfg) {
-            const locKey = makeLocKey(cfg);
-            if (!locKey) return null;
-
-            const existing = weatherCache.get(locKey) || { locKey };
-            if (!shouldRefreshGeo(existing, locKey)) return { lat: existing.lat, lon: existing.lon };
-
-            if (!OWM_API_KEY || OWM_API_KEY.includes("PUT_YOUR")) throw new Error("OWM API key not set");
-
-            let lat = null, lon = null;
-
-            if (cfg.type === "zip") {
-                const zip = String(cfg.value || "").replace(/[^0-9]/g, "");
-                const url = `https://api.openweathermap.org/geo/1.0/zip?zip=${encodeURIComponent(zip)},US&appid=${encodeURIComponent(OWM_API_KEY)}`;
-                const res = await fetch(url, { cache: "no-store" });
-                if (!res.ok) throw new Error(`Geo ZIP failed: ${res.status}`);
-                const j = await res.json();
-                lat = j?.lat; lon = j?.lon;
-            } else {
-                const q = String(cfg.value || "");
-                const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(q)}&limit=1&appid=${encodeURIComponent(OWM_API_KEY)}`;
-                const res = await fetch(url, { cache: "no-store" });
-                if (!res.ok) throw new Error(`Geo direct failed: ${res.status}`);
-                const arr = await res.json();
-                lat = arr?.[0]?.lat; lon = arr?.[0]?.lon;
-            }
-
-            if (typeof lat !== "number" || typeof lon !== "number") throw new Error("Could not resolve location to lat/lon");
-
-            existing.lat = lat;
-            existing.lon = lon;
-            existing.geoAt = Date.now();
-            existing.locKey = locKey;
-            weatherCache.set(locKey, existing);
-
-            return { lat, lon };
-        }
-
         async function fetchWeatherForCfg(cfg) {
             const locKey = makeLocKey(cfg);
             if (!locKey) {
-                if (DEBUG_ENABLED) console.warn("[WEATHER] location missing (cfg.value/label empty)", cfg);
+                if (DEBUG_ENABLED) console.warn("[WEATHER] ZIP missing or invalid", cfg);
                 return null;
             }
 
@@ -1749,87 +1581,65 @@
 
             if (!shouldRefreshPayload(entry)) return entry.payload;
 
-            const geo = await geocodeCfg(cfg);
-            if (!geo) return null;
-
-            if (!OWM_API_KEY || OWM_API_KEY.includes("PUT_YOUR")) throw new Error("OWM API key not set");
-
-            // Preferred: One Call 3.0 (may require plan/billing on some accounts)
-            const onecallUrl =
-                `https://api.openweathermap.org/data/3.0/onecall?` +
-                `lat=${encodeURIComponent(geo.lat)}&lon=${encodeURIComponent(geo.lon)}` +
-                `&exclude=minutely,hourly&appid=${encodeURIComponent(OWM_API_KEY)}` +
-                `&units=${encodeURIComponent(OWM_UNITS)}`;
-
-            try {
-                if (DEBUG_ENABLED) console.log("[WEATHER] requesting (onecall):", onecallUrl);
-                const res = await fetch(onecallUrl, { cache: "no-store" });
-
-                if (!res.ok) {
-                    const body = await res.text().catch(() => "");
-                    throw new Error(`OneCall failed: ${res.status} ${res.statusText} ${body ? ("| " + body.slice(0, 120)) : ""}`);
-                }
-
-                const json = await res.json();
-
-                entry.payload = json;
-                entry.payloadAt = Date.now();
-                weatherCache.set(locKey, entry);
-                return json;
-            } catch (e) {
-                // Fallback: Current Weather 2.5 (generally available on free tier)
-                const currentUrl =
-                    `https://api.openweathermap.org/data/2.5/weather?` +
-                    `lat=${encodeURIComponent(geo.lat)}&lon=${encodeURIComponent(geo.lon)}` +
-                    `&appid=${encodeURIComponent(OWM_API_KEY)}` +
-                    `&units=${encodeURIComponent(OWM_UNITS)}`;
-
-                console.warn("[WEATHER] OneCall failed, falling back to current weather:", e);
-
-                if (DEBUG_ENABLED) console.log("[WEATHER] requesting (current):", currentUrl);
-                const res2 = await fetch(currentUrl, { cache: "no-store" });
-
-                if (!res2.ok) {
-                    const body2 = await res2.text().catch(() => "");
-                    throw new Error(`Current weather failed: ${res2.status} ${res2.statusText} ${body2 ? ("| " + body2.slice(0, 120)) : ""}`);
-                }
-
-                const j2 = await res2.json();
-
-                // Normalize into a OneCall-like shape so the rest of FlipBoard doesn't care.
-                const tzOff = (typeof j2.timezone === "number") ? j2.timezone : 0;
-                const normalized = {
-                    _source: "current/2.5",
-                    timezone_offset: tzOff,
-                    current: {
-                        dt: j2.dt || null,
-                        sunrise: j2.sys?.sunrise || null,
-                        sunset: j2.sys?.sunset || null,
-                        temp: j2.main?.temp,
-                        feels_like: j2.main?.feels_like,
-                        pressure: j2.main?.pressure,
-                        humidity: j2.main?.humidity,
-                        dew_point: null,
-                        uvi: null,
-                        clouds: j2.clouds?.all,
-                        visibility: j2.visibility,
-                        wind_speed: j2.wind?.speed,
-                        wind_deg: j2.wind?.deg,
-                        weather: Array.isArray(j2.weather) ? j2.weather.map(w => ({
-                            id: w.id,
-                            main: w.main,
-                            description: w.description,
-                            icon: w.icon
-                        })) : []
-                    },
-                    daily: [] // not available in this fallback
-                };
-
-                entry.payload = normalized;
-                entry.payloadAt = Date.now();
-                weatherCache.set(locKey, entry);
-                return normalized;
+            if (!OWM_API_KEY || OWM_API_KEY.includes("PUT_YOUR")) {
+                throw new Error("OWM API key not set");
             }
+
+            const zip = String(cfg?.value || "").replace(/[^0-9]/g, "").slice(0, 5);
+            if (zip.length !== 5) {
+                throw new Error("Weather ZIP is missing or invalid");
+            }
+
+            const currentUrl =
+                `https://api.openweathermap.org/data/2.5/weather?zip=${encodeURIComponent(zip)},US&appid=${encodeURIComponent(OWM_API_KEY)}&units=imperial`;
+
+            if (DEBUG_ENABLED) console.log("[WEATHER] ZIP request:", currentUrl);
+
+            const res = await fetch(currentUrl, { cache: "no-store" });
+            if (!res.ok) {
+                const body = await res.text().catch(() => "");
+                throw new Error(`Current weather failed: ${res.status} ${res.statusText} ${body ? ("| " + body.slice(0, 120)) : ""}`);
+            }
+
+            const j = await res.json();
+
+            const city = cleanText(j?.name || "");
+            const country = cleanText(j?.sys?.country || "");
+            const label = city ? (country ? `${city}, ${country}` : city) : (cleanText(cfg?.label || "") || zip);
+            if (label) entry.locLabel = label;
+
+            const tzOff = (typeof j?.timezone === "number") ? j.timezone : 0;
+            const normalized = {
+                _source: "current/2.5",
+                timezone_offset: tzOff,
+                current: {
+                    dt: j?.dt || null,
+                    sunrise: j?.sys?.sunrise || null,
+                    sunset: j?.sys?.sunset || null,
+                    temp: j?.main?.temp,
+                    feels_like: j?.main?.feels_like,
+                    pressure: j?.main?.pressure,
+                    humidity: j?.main?.humidity,
+                    dew_point: null,
+                    uvi: null,
+                    clouds: j?.clouds?.all,
+                    visibility: j?.visibility,
+                    wind_speed: j?.wind?.speed,
+                    wind_deg: j?.wind?.deg,
+                    weather: Array.isArray(j?.weather) ? j.weather.map(w => ({
+                        id: w?.id,
+                        main: w?.main,
+                        description: w?.description,
+                        icon: w?.icon
+                    })) : []
+                },
+                daily: []
+            };
+
+            entry.payload = normalized;
+            entry.payloadAt = Date.now();
+            weatherCache.set(locKey, entry);
+            return normalized;
         }
 
         function stopWeatherRefresh() {
@@ -1843,7 +1653,7 @@
             for (const b of Object.values(boards)) {
                 if (!b) continue;
                 if ((b.type || "static") !== "dynamic") continue;
-                if ((b.source || "") !== "openweather_onecall") continue;
+                if (!["openweather_onecall", "openweather_zip_current"].includes((b.source || ""))) continue;
 
                 const cfg = getWeatherConfig(pack, b);
                 if (cfg?.value) cfgs.push(cfg);
@@ -1924,8 +1734,8 @@
                 stage_3: {
                     name: "Weather",
                     type: "dynamic",
-                    source: "openweather_onecall",
-                    weather: { location: { type: "city_state", value: "Charlotte, NC", label: "CHARLOTTE NC" } },
+                    source: "openweather_zip_current",
+                    weather: { location: { type: "zip", value: "28202", label: "CHARLOTTE, NC" } },
                     rows: [
                         "{COLOR CYAN}{LOCATION}{COLOR RESET}",
                         "{COLOR YELLOW}{TEMP_LINE}{COLOR RESET}",
@@ -2013,22 +1823,6 @@
             return !!pack?.boards?.[id]?.one_shot;
         }
 
-        // Keep this helper for any other callers, but DO NOT exclude one-shot boards here.
-        // One-shot behavior is handled runtime-only in activeRotationOrder, after dwell.
-        function getRotationKeys(pack) {
-            const boards = pack?.boards || {};
-            const isValidRotateBoard = (key) => {
-                const st = boards[key];
-                if (!st) return false;
-                return true;
-            };
-
-            const order = Array.isArray(pack?.rotation?.order) ? pack.rotation.order : [];
-            const cleaned = order.filter(isValidRotateBoard);
-
-            if (cleaned.length) return cleaned;
-            return Object.keys(boards).filter(isValidRotateBoard).sort();
-        }
 
         async function showStage(stageKey) {
             const st = boardPack?.boards?.[stageKey];
@@ -2040,7 +1834,7 @@
             const rows = Array.isArray(st.rows) ? st.rows : [];
 
             // Dynamic: Weather
-            if ((st.type || "static") === "dynamic" && (st.source || "") === "openweather_onecall") {
+            if ((st.type || "static") === "dynamic" && ["openweather_onecall", "openweather_zip_current"].includes((st.source || ""))) {
                 const cfg = getWeatherConfig(boardPack, st);
 
                 let payload = null;
@@ -2052,14 +1846,6 @@
 
                 const rendered = rows.map(r => renderRowWithTokens(r, payload, boardPack, st));
                 await setLinesAndWait(asRows(rendered.length ? rendered : ["WEATHER", "UNAVAILABLE", "", "", "", "", "", ""]));
-                return;
-            }
-
-            // Dynamic: Firestore Calendar Cache
-            if ((st.type || "static") === "dynamic" && (st.source || "") === "firestore_calendar_cache") {
-                const dwell = Number(boardPack?.rotation?.dwell_ms || DEFAULT_DWELL_MS);
-                const lines = await resolveCalendarStageLines(st, dwell);
-                await setLinesAndWait(lines);
                 return;
             }
 
@@ -2297,31 +2083,22 @@
                     console.log("[DEBUG] one_shot flags:", order.map(k => ({ key: k, one_shot: !!bpPack?.boards?.[k]?.one_shot })));
                 }
 
-                // Calendar cache: resolve if available, otherwise safely default
-                if (window.loadCalendarCache) {
-                    try { await window.loadCalendarCache(); }
-                    catch (e) { console.warn("[CALENDAR] cache load failed (continuing):", e); }
-                }
-
                 // All required startup data is now resolved (or defaulted).
                 isBootReady = true;
                 ANIM_DISABLED = false;
 
                 setStatus("ok", "ready", "ok");
 
-                // Single, clean flip from LOADING screen -> first board in rotation
+                // Single, clean flip from LOADING screen -> rotation loop (starts at index 0)
                 const firstId = (Array.isArray(activeRotationOrder) && activeRotationOrder.length) ? activeRotationOrder[0] : null;
-                if (firstId) {
-                    await showStage(firstId);
-                    isInitialBootFlipDone = true;
-                }
 
                 // Start weather refresh loop ONLY after boot is ready
                 if (packNeedsWeather(boardPack)) startWeatherRefresh();
                 else stopWeatherRefresh();
 
-                // Start rotation AFTER the first stage is already shown (start at next index)
-                window.__rotationStartIndex = firstId ? 1 : 0;
+                // Start rotation at the FIRST board in rotation. The loop will render index 0 immediately and then dwell.
+                window.__rotationStartIndex = 0;
+                isInitialBootFlipDone = true;
                 startRotation();
 
             } catch (err) {
@@ -2331,6 +2108,6 @@
                 ANIM_DISABLED = true;
                 setLinesInstant(asRows(["FLIPBOARD", "ERROR", "", "", "", "", "", ""]));
             }
-        })();;
+        })();
     }
 </script>
