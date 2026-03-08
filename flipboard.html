@@ -4,7 +4,7 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FlipBoard Runtime v1.0.21 — Split-Flap Board</title>
+<title>FlipBoard Runtime v1.0.23 — Split-Flap Board</title>
 
 <style>
     :root {
@@ -532,7 +532,7 @@
     } else {
         window.__FLIPBOARD_BOOTED = true;
 
-        const RUNTIME_VERSION = "1.0.21";
+        const RUNTIME_VERSION = "1.0.23";
         console.log(`[RUNTIME] FlipBoard Display v${RUNTIME_VERSION}`);
 
 
@@ -2049,8 +2049,41 @@
             });
         }
 
-        let unsubscribeBoardPack = null;
-        let unsubscribeEventsPack = null;
+        
+let unsubscribeBoardPack = null;
+let unsubscribeEventsPack = null;
+
+function detachRealtimeListeners() {
+    if (typeof unsubscribeBoardPack === "function") {
+        try { unsubscribeBoardPack(); } catch(_) {}
+    }
+    if (typeof unsubscribeEventsPack === "function") {
+        try { unsubscribeEventsPack(); } catch(_) {}
+    }
+    unsubscribeBoardPack = null;
+    unsubscribeEventsPack = null;
+}
+
+function attachRealtimeListeners() {
+    detachRealtimeListeners();
+
+    if (typeof window.subscribeBoardPack === "function") {
+        unsubscribeBoardPack = window.subscribeBoardPack((pack, src)=>{
+            console.log("[FIRESTORE] boardPack realtime update:",src);
+            applyBoardPackIncoming(pack,src);
+        });
+    }
+
+    if (typeof window.subscribeEventsPack === "function") {
+        unsubscribeEventsPack = window.subscribeEventsPack((pack, src)=>{
+            console.log("[FIRESTORE] events realtime update:",src);
+            applyEventsIncoming(pack,src);
+        });
+    }
+
+    console.log("[FIRESTORE] realtime listeners attached");
+}
+
 
         (async () => {
             buildBoard(20, 8);
@@ -2100,6 +2133,9 @@
                 window.__rotationStartIndex = 0;
                 isInitialBootFlipDone = true;
                 startRotation();
+
+                // Attach live Firestore listeners after initial boot completes.
+                attachRealtimeListeners();
 
             } catch (err) {
                 console.error("[BOOT] startup failed:", err);
