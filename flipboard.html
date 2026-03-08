@@ -4,7 +4,7 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FlipBoard Runtime v1.0.28</title>
+<title>FlipBoard Runtime v1.0.29</title>
 
 <style>
     :root {
@@ -131,8 +131,8 @@
         display: block;
 
         font-weight: 900;
-        font-size: clamp(14px, 2.8vw, 52px);
-        line-height: 1;
+        font-size: calc(var(--tile-h) * 0.58);
+        line-height: var(--tile-h);
         letter-spacing: .02em;
         text-shadow: 0 2px 0 rgba(0, 0, 0, .6);
         user-select: none;
@@ -158,7 +158,7 @@
         display: grid;
         place-items: center;
         transform: none;
-        line-height: 1;
+        line-height: var(--tile-h);
     }
 
     .bottom .glyphText {
@@ -380,7 +380,7 @@
               <div style="font-size:18px;font-weight:700;">Device not registered</div>
               <div style="font-size:12px;opacity:.75;">FlipBoard Display</div>
             </div>
-            <div style="margin-top:10px;opacity:.9;line-height:1.45;">
+            <div style="margin-top:10px;opacity:.9;line-height: var(--tile-h);">
               This display is logged in but not authorized for this account yet.<br/>
               Add the Device ID in <b>FlipEditor → Devices</b>.
             </div>
