@@ -4,7 +4,7 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FlipBoard Runtime v1.0.27 — Split-Flap Board</title>
+<title>FlipBoard Runtime v1.0.28</title>
 
 <style>
     :root {
@@ -22,6 +22,8 @@
 
         --flip-ms: 140ms;
         --persp: 900px;
+        --tile-w: 42px;
+        --tile-h: 56px;
 
         --ok: #4dd285;
         --warn: #ffd27a;
@@ -57,25 +59,36 @@
     .boardShell {
         width: 100%;
         height: 100%;
+        min-height: 260px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
     }
 
     .board {
         display: grid;
-        grid-template-columns: repeat(var(--cols), 1fr);
-        grid-template-rows: repeat(var(--rows), 1fr);
+        grid-template-columns: repeat(var(--cols), var(--tile-w));
+        grid-template-rows: repeat(var(--rows), var(--tile-h));
         gap: var(--gap);
         background: rgba(0, 0, 0, .25);
         box-shadow: 0 20px 60px rgba(0, 0, 0, .55);
-        width: 100%;
-        height: 100%;
-        min-height: 260px;
+        width: max-content;
+        height: max-content;
+        max-width: 100%;
+        max-height: 100%;
         overflow: hidden;
         border-radius: 18px;
         padding: 14px;
+        justify-content: center;
+        align-content: center;
+        place-content: center;
     }
 
     .tile {
         position: relative;
+        width: var(--tile-w);
+        height: var(--tile-h);
         background: linear-gradient(var(--tileTop), var(--tile));
         border: 1px solid var(--edge);
         border-radius: 20%;
@@ -86,11 +99,14 @@
     /* Keep runtime corners visually identical to the editor preview.
        Radius must be applied to all animated layers, not just the tile shell. */
     .tile,
+    .tile .front,
+    .tile .back,
     .tile .top.static,
     .tile .bottom.static,
     .tile .flap.top,
     .tile .flap.bottom {
         border-radius: 20%;
+        overflow: hidden;
     }
 
     .tile::after {
@@ -765,7 +781,7 @@
             }
         }
         //140;
-        const STAGGER = 8;
+        const STAGGER = 100; //8
 
         const clamp = (s, n) => String(s ?? "").toUpperCase().slice(0, n).padEnd(n, " ");
         const normalizeChar = c => {
@@ -1490,6 +1506,46 @@
             document.documentElement.style.setProperty("--cols", COLS);
             document.documentElement.style.setProperty("--rows", ROWS);
             gridVal.textContent = `${COLS}×${ROWS}`;
+            updateBoardLayout();
+        }
+
+        function updateBoardLayout() {
+            if (!board) return;
+
+            const shell = board.parentElement;
+            if (!shell) return;
+
+            const shellRect = shell.getBoundingClientRect();
+            if (!shellRect.width || !shellRect.height) return;
+
+            const boardStyle = getComputedStyle(board);
+            const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gap")) || 0;
+            const padX = (parseFloat(boardStyle.paddingLeft) || 0) + (parseFloat(boardStyle.paddingRight) || 0);
+            const padY = (parseFloat(boardStyle.paddingTop) || 0) + (parseFloat(boardStyle.paddingBottom) || 0);
+
+            const availW = Math.max(1, shellRect.width - padX);
+            const availH = Math.max(1, shellRect.height - padY);
+
+            const gridGapW = Math.max(0, (COLS - 1) * gap);
+            const gridGapH = Math.max(0, (ROWS - 1) * gap);
+
+            let tileW = (availW - gridGapW) / Math.max(COLS, 1);
+            let tileH = tileW / 0.75;
+
+            const totalH = (ROWS * tileH) + gridGapH;
+            if (totalH > availH) {
+                tileH = (availH - gridGapH) / Math.max(ROWS, 1);
+                tileW = tileH * 0.75;
+            }
+
+            // Final clamp in case both dimensions are tight after rounding.
+            const maxTileW = (availW - gridGapW) / Math.max(COLS, 1);
+            const maxTileH = (availH - gridGapH) / Math.max(ROWS, 1);
+            tileW = Math.max(4, Math.min(tileW, maxTileW, maxTileH * 0.75));
+            tileH = Math.max(4, tileW / 0.75);
+
+            document.documentElement.style.setProperty("--tile-w", `${tileW}px`);
+            document.documentElement.style.setProperty("--tile-h", `${tileH}px`);
         }
 
         function buildBoard(cols, rows) {
@@ -1562,7 +1618,12 @@
                 t.setInstant(" ", COLOR_WHITE);
                 tiles.push(t);
             }
+
+            updateBoardLayout();
         }
+
+        window.addEventListener("resize", updateBoardLayout);
+        window.addEventListener("orientationchange", updateBoardLayout);
 
         /* ============================================================
            DISPLAY API (COLOR-AWARE)
