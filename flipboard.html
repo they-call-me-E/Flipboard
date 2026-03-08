@@ -4,7 +4,7 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FlipBoard Runtime v1.0.23 — Split-Flap Board</title>
+<title>FlipBoard Runtime v1.0.27 — Split-Flap Board</title>
 
 <style>
     :root {
@@ -532,7 +532,7 @@
     } else {
         window.__FLIPBOARD_BOOTED = true;
 
-        const RUNTIME_VERSION = "1.0.23";
+        const RUNTIME_VERSION = "1.0.25";
         console.log(`[RUNTIME] FlipBoard Display v${RUNTIME_VERSION}`);
 
 
@@ -604,6 +604,83 @@
         const URL_DEBUG = new URLSearchParams(window.location.search).get("debug") === "1";
 
         let debugToastTimer = null;
+        let debugConsoleBox = null;
+        let debugConsoleInstalled = false;
+        const DEBUG_CONSOLE_MAX_LINES = 150;
+
+        function ensureDebugConsole() {
+            if (debugConsoleBox) return debugConsoleBox;
+
+            debugConsoleBox = document.createElement("div");
+            debugConsoleBox.id = "fb-debug-console";
+            debugConsoleBox.style.position = "fixed";
+            debugConsoleBox.style.bottom = "0";
+            debugConsoleBox.style.left = "0";
+            debugConsoleBox.style.right = "0";
+            debugConsoleBox.style.maxHeight = "200px";
+            debugConsoleBox.style.overflow = "auto";
+            debugConsoleBox.style.background = "rgba(0,0,0,0.85)";
+            debugConsoleBox.style.color = "#00ff00";
+            debugConsoleBox.style.fontFamily = "monospace";
+            debugConsoleBox.style.fontSize = "12px";
+            debugConsoleBox.style.zIndex = "99999";
+            debugConsoleBox.style.padding = "6px";
+            debugConsoleBox.style.display = "none";
+            debugConsoleBox.style.whiteSpace = "pre-wrap";
+            debugConsoleBox.style.wordBreak = "break-word";
+            document.body.appendChild(debugConsoleBox);
+            return debugConsoleBox;
+        }
+
+        function setDebugConsoleVisible(visible) {
+            const el = ensureDebugConsole();
+            el.style.display = visible ? "block" : "none";
+        }
+
+        function pushDebugConsoleLine(args, color) {
+            const el = ensureDebugConsole();
+            const line = document.createElement("div");
+            line.textContent = args.map(a => {
+                try {
+                    return typeof a === "string" ? a : JSON.stringify(a);
+                } catch (_) {
+                    return String(a);
+                }
+            }).join(" ");
+            if (color) line.style.color = color;
+            el.appendChild(line);
+
+            while (el.children.length > DEBUG_CONSOLE_MAX_LINES) {
+                el.removeChild(el.firstChild);
+            }
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function installDebugConsoleHooks() {
+            if (debugConsoleInstalled) return;
+            debugConsoleInstalled = true;
+
+            const origLog = console.log.bind(console);
+            const origWarn = console.warn.bind(console);
+            const origErr = console.error.bind(console);
+
+            console.log = function (...args) {
+                origLog(...args);
+                pushDebugConsoleLine(args, "#00ff00");
+            };
+
+            console.warn = function (...args) {
+                origWarn(...args);
+                pushDebugConsoleLine(args, "#ffff00");
+            };
+
+            console.error = function (...args) {
+                origErr(...args);
+                pushDebugConsoleLine(args, "#ff4040");
+            };
+        }
+
+        installDebugConsoleHooks();
 
         function showDebugToast(msg, ms = 1400) {
             let el = document.getElementById("debugToast");
@@ -621,6 +698,7 @@
 
         function applyDebugUI() {
             document.body.classList.toggle("debug-off", !DEBUG_ENABLED);
+            setDebugConsoleVisible(DEBUG_ENABLED);
         }
 
         function setDebugEnabled(next) {
@@ -2049,40 +2127,40 @@
             });
         }
 
-        
-let unsubscribeBoardPack = null;
-let unsubscribeEventsPack = null;
 
-function detachRealtimeListeners() {
-    if (typeof unsubscribeBoardPack === "function") {
-        try { unsubscribeBoardPack(); } catch(_) {}
-    }
-    if (typeof unsubscribeEventsPack === "function") {
-        try { unsubscribeEventsPack(); } catch(_) {}
-    }
-    unsubscribeBoardPack = null;
-    unsubscribeEventsPack = null;
-}
+        let unsubscribeBoardPack = null;
+        let unsubscribeEventsPack = null;
 
-function attachRealtimeListeners() {
-    detachRealtimeListeners();
+        function detachRealtimeListeners() {
+            if (typeof unsubscribeBoardPack === "function") {
+                try { unsubscribeBoardPack(); } catch (_) { }
+            }
+            if (typeof unsubscribeEventsPack === "function") {
+                try { unsubscribeEventsPack(); } catch (_) { }
+            }
+            unsubscribeBoardPack = null;
+            unsubscribeEventsPack = null;
+        }
 
-    if (typeof window.subscribeBoardPack === "function") {
-        unsubscribeBoardPack = window.subscribeBoardPack((pack, src)=>{
-            console.log("[FIRESTORE] boardPack realtime update:",src);
-            applyBoardPackIncoming(pack,src);
-        });
-    }
+        function attachRealtimeListeners() {
+            detachRealtimeListeners();
 
-    if (typeof window.subscribeEventsPack === "function") {
-        unsubscribeEventsPack = window.subscribeEventsPack((pack, src)=>{
-            console.log("[FIRESTORE] events realtime update:",src);
-            applyEventsIncoming(pack,src);
-        });
-    }
+            if (typeof window.subscribeBoardPack === "function") {
+                unsubscribeBoardPack = window.subscribeBoardPack((pack, src) => {
+                    console.log("[FIRESTORE] boardPack realtime update:", src);
+                    applyBoardPackIncoming(pack, src);
+                });
+            }
 
-    console.log("[FIRESTORE] realtime listeners attached");
-}
+            if (typeof window.subscribeEventsPack === "function") {
+                unsubscribeEventsPack = window.subscribeEventsPack((pack, src) => {
+                    console.log("[FIRESTORE] events realtime update:", src);
+                    applyEventsIncoming(pack, src);
+                });
+            }
+
+            console.log("[FIRESTORE] realtime listeners attached");
+        }
 
 
         (async () => {
@@ -2146,4 +2224,5 @@ function attachRealtimeListeners() {
             }
         })();
     }
+
 </script>
