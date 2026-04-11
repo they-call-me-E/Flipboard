@@ -4,7 +4,7 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FlipBoard Runtime v1.0.29</title>
+<title>FlipBoard Runtime v1.0.34</title>
 
 <style>
     :root {
@@ -132,7 +132,7 @@
 
         font-weight: 900;
         font-size: calc(var(--tile-h) * 0.58);
-        line-height: var(--tile-h);
+        line-height:1.45;
         letter-spacing: .02em;
         text-shadow: 0 2px 0 rgba(0, 0, 0, .6);
         user-select: none;
@@ -309,9 +309,8 @@
 </div>
 
 <!-- ============================================================
-       Firebase Firestore (Android WebView safe) + REALTIME listener
+       Firebase Firestore (Android WebView safe) + realtime listener
        - boardPack stored in: flipboard/boardPack  field: data (stringified JSON)
-       - events stored in:    flipboard/events     field: data (stringified JSON)
        - calendar cache in:   flipboard/calendarCache (NORMAL FIELDS, NOT stringified)
   ============================================================ -->
 <script type="module">
@@ -344,18 +343,15 @@
         appId: "1:926200267004:web:1ee00c4d344f670b775779"
     };
 
-    const DEV_COLLECTION = "flipboard"; // legacy/global docs (not user-private)
-
     const ACCOUNT_COLLECTION = "accounts";
+    const DEVICE_SUBCOL = "devices";
+    const BOARDPACKS_SUBCOL = "boardPacks";
     const USER_DATA_SUBCOL = "data";
-
-    const BOARD_DOC_ID = "boardPack";
-    const EVENTS_DOC_ID = "events";
-
+    const EVENTS_SUBCOL = "events";
+    const EVENTS_DOC_ID = "data";
     const FIELD = "data";
 
     // Device-scoped storage
-    const DEVICE_SUBCOL = "devices";
     const DEVICE_ID_STORAGE_KEY = "flipboard_deviceId";
 
     function getOrCreateDeviceId() {
@@ -451,62 +447,197 @@
             // Per-user docs (production)
             const deviceId = getOrCreateDeviceId();
             window.__flipboardDeviceId = deviceId;
+
             const deviceRef = doc(db, ACCOUNT_COLLECTION, user.uid, DEVICE_SUBCOL, deviceId);
-            const boardRef = doc(db, ACCOUNT_COLLECTION, user.uid, DEVICE_SUBCOL, deviceId, USER_DATA_SUBCOL, BOARD_DOC_ID);
-            const eventsRef = doc(db, ACCOUNT_COLLECTION, user.uid, DEVICE_SUBCOL, deviceId, USER_DATA_SUBCOL, EVENTS_DOC_ID);
+            const eventsRef = doc(db, ACCOUNT_COLLECTION, user.uid, EVENTS_SUBCOL, EVENTS_DOC_ID);
 
-            const parseDoc = (snap, label, which) => {
-                if (!snap.exists()) throw new Error(`Doc not found (${which}:${label}).`);
-                const raw = snap.get(FIELD);
-                if (typeof raw !== "string" || !raw.trim()) throw new Error(`Field "${FIELD}" missing (${which}:${label}).`);
-                return JSON.parse(raw);
-            };
-
-            async function loadStringFieldDoc(ref, which) {
-                // server
-                try {
-                    const snap = await getDocFromServer(ref);
-                    window.__flipboardLastSource = `firestore:${which}:server`;
-                    return parseDoc(snap, "server", which);
-                } catch (e1) {
-                    console.warn(`[FIRESTORE] ${which} server failed, trying CACHE:`, e1?.code || e1?.message || e1);
-                }
-                // cache
-                try {
-                    const snap = await getDocFromCache(ref);
-                    window.__flipboardLastSource = `firestore:${which}:cache`;
-                    return parseDoc(snap, "cache", which);
-                } catch (e2) {
-                    console.warn(`[FIRESTORE] ${which} cache failed, trying DEFAULT:`, e2?.code || e2?.message || e2);
-                }
-                // default
-                const snap = await getDoc(ref);
-                window.__flipboardLastSource = `firestore:${which}:default`;
-                return parseDoc(snap, "default", which);
+            function boardPackRef(boardPackId) {
+                return doc(db, ACCOUNT_COLLECTION, user.uid, BOARDPACKS_SUBCOL, boardPackId);
             }
 
-            window.loadBoardPack = async () => loadStringFieldDoc(boardRef, "boardPack");
-            window.loadEventsPack = async () => loadStringFieldDoc(eventsRef, "events");
+            async function ensureDeviceRegistered(uid, deviceId, deviceRef) {
+                try {
+                    const snap = await getDoc(deviceRef);
+                    if (snap.exists()) {
+                        console.log("[DEVICE] authorized:", deviceId);
+                        return true;
+                    }
+
+                    console.warn("[DEVICE] NOT REGISTERED:", deviceId);
+                    renderDeviceNotRegisteredScreen({ uid, deviceId });
+
+                    onSnapshot(deviceRef, (liveSnap) => {
+                        if (liveSnap.exists()) {
+                            console.log("[DEVICE] authorized live, restarting runtime");
+                            location.reload();
+                        }
+                    }, (err) => {
+                        console.error("[DEVICE] live registration watch failed:", err);
+                    });
+
+                    return false;
+                } catch (err) {
+                    console.error("[DEVICE] authorization check failed:", err);
+                    throw err;
+                }
+            }
+
+            const authorized = await ensureDeviceRegistered(user.uid, deviceId, deviceRef);
+            if (!authorized) {
+                window.__flipboardFirestoreError = new Error("Device not registered");
+                return false;
+            }
+
+            async function loadDeviceDoc() {
+                try {
+                    const snap = await getDocFromServer(deviceRef);
+                    if (!snap.exists()) throw new Error("Device doc not found.");
+                    return { snap, data: snap.data() || {}, src: "server" };
+                } catch (e1) {
+                    console.warn("[FIRESTORE] device server failed, trying CACHE:", e1?.code || e1?.message || e1);
+                }
+                try {
+                    const snap = await getDocFromCache(deviceRef);
+                    if (!snap.exists()) throw new Error("Device doc not found (cache).");
+                    return { snap, data: snap.data() || {}, src: "cache" };
+                } catch (e2) {
+                    console.warn("[FIRESTORE] device cache failed, trying DEFAULT:", e2?.code || e2?.message || e2);
+                }
+                const snap = await getDoc(deviceRef);
+                if (!snap.exists()) throw new Error("Device doc not found.");
+                return { snap, data: snap.data() || {}, src: "default" };
+            }
+
+            function parseBoardPackDoc(snap, label) {
+                if (!snap.exists()) throw new Error(`Doc not found (boardPack:${label}).`);
+                const raw = snap.get(FIELD);
+                if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`Field "${FIELD}" missing object payload (boardPack:${label}).`);
+                return raw;
+            }
+
+            function parseEventsDoc(snap, label) {
+                if (!snap.exists()) {
+                    console.log("[EVENTS] account events doc missing:", label);
+                    return { events: {} };
+                }
+                const raw = snap.get(FIELD);
+                if (typeof raw !== "string" || !raw.trim()) {
+                    console.log("[EVENTS] account events field missing/empty:", label);
+                    return { events: {} };
+                }
+                try {
+                    const parsed = JSON.parse(raw);
+                    console.log("[EVENTS] account events loaded:", label);
+                    return parsed && typeof parsed === "object" ? parsed : { events: {} };
+                } catch (err) {
+                    console.error("[EVENTS] account events parse failed:", label, err);
+                    return { events: {} };
+                }
+            }
+
+            async function resolveBoardPackRef() {
+                const { data, src } = await loadDeviceDoc();
+                const boardPackId = String(data?.boardPackId || "").trim();
+                if (!boardPackId) throw new Error(`Device "${deviceId}" has no boardPackId assigned.`);
+                window.__flipboardBoardPackId = boardPackId;
+                window.__flipboardLastSource = `firestore:device:${src}`;
+                return boardPackRef(boardPackId);
+            }
+
+            async function loadBoardPackDoc() {
+                const ref = await resolveBoardPackRef();
+                try {
+                    const snap = await getDocFromServer(ref);
+                    window.__flipboardLastSource = "firestore:boardPack:server";
+                    return parseBoardPackDoc(snap, "server");
+                } catch (e1) {
+                    console.warn("[FIRESTORE] boardPack server failed, trying CACHE:", e1?.code || e1?.message || e1);
+                }
+                try {
+                    const snap = await getDocFromCache(ref);
+                    window.__flipboardLastSource = "firestore:boardPack:cache";
+                    return parseBoardPackDoc(snap, "cache");
+                } catch (e2) {
+                    console.warn("[FIRESTORE] boardPack cache failed, trying DEFAULT:", e2?.code || e2?.message || e2);
+                }
+                const snap = await getDoc(ref);
+                window.__flipboardLastSource = "firestore:boardPack:default";
+                return parseBoardPackDoc(snap, "default");
+            }
+
+            async function loadEventsDoc() {
+                console.log("[EVENTS] loading account events");
+                try {
+                    const snap = await getDocFromServer(eventsRef);
+                    window.__flipboardLastSource = "firestore:events:server";
+                    return parseEventsDoc(snap, "server");
+                } catch (e1) {
+                    console.warn("[FIRESTORE] events server failed, trying CACHE:", e1?.code || e1?.message || e1);
+                }
+                try {
+                    const snap = await getDocFromCache(eventsRef);
+                    window.__flipboardLastSource = "firestore:events:cache";
+                    return parseEventsDoc(snap, "cache");
+                } catch (e2) {
+                    console.warn("[FIRESTORE] events cache failed, trying DEFAULT:", e2?.code || e2?.message || e2);
+                }
+                const snap = await getDoc(eventsRef);
+                window.__flipboardLastSource = "firestore:events:default";
+                return parseEventsDoc(snap, "default");
+            }
+
+            window.loadBoardPack = async () => loadBoardPackDoc();
+            window.loadEventsPack = async () => loadEventsDoc();
 
             window.subscribeBoardPack = function subscribeBoardPack(cb) {
                 if (typeof cb !== "function") throw new Error("subscribeBoardPack(cb) requires a callback");
 
-                const unsub = onSnapshot(boardRef, { includeMetadataChanges: true }, (snap) => {
-                    try {
-                        const fromCache = !!snap.metadata?.fromCache;
-                        const src = fromCache ? "firestore:boardPack:realtime-cache" : "firestore:boardPack:realtime-server";
-                        window.__flipboardLastSource = src;
+                let innerUnsub = null;
+                let currentBoardPackId = "";
 
-                        const pack = parseDoc(snap, src, "boardPack");
-                        cb(pack, src);
+                const clearInner = () => {
+                    if (innerUnsub) {
+                        try { innerUnsub(); } catch (_) { }
+                        innerUnsub = null;
+                    }
+                };
+
+                const outerUnsub = onSnapshot(deviceRef, { includeMetadataChanges: true }, (deviceSnap) => {
+                    try {
+                        if (!deviceSnap.exists()) throw new Error("Device doc no longer exists.");
+                        const deviceData = deviceSnap.data() || {};
+                        const nextBoardPackId = String(deviceData.boardPackId || "").trim();
+                        if (!nextBoardPackId) throw new Error("Device has no boardPackId assigned.");
+                        if (nextBoardPackId === currentBoardPackId && innerUnsub) return;
+
+                        currentBoardPackId = nextBoardPackId;
+                        window.__flipboardBoardPackId = nextBoardPackId;
+                        clearInner();
+
+                        const ref = boardPackRef(nextBoardPackId);
+                        innerUnsub = onSnapshot(ref, { includeMetadataChanges: true }, (snap) => {
+                            try {
+                                const fromCache = !!snap.metadata?.fromCache;
+                                const src = fromCache ? "firestore:boardPack:realtime-cache" : "firestore:boardPack:realtime-server";
+                                window.__flipboardLastSource = src;
+                                cb(parseBoardPackDoc(snap, src), src);
+                            } catch (err) {
+                                console.error("[FIRESTORE] boardPack snapshot parse error:", err);
+                            }
+                        }, (err) => {
+                            console.error("[FIRESTORE] boardPack onSnapshot error:", err);
+                        });
                     } catch (err) {
-                        console.error("[FIRESTORE] boardPack snapshot parse error:", err);
+                        console.error("[FIRESTORE] device snapshot error:", err);
                     }
                 }, (err) => {
-                    console.error("[FIRESTORE] boardPack onSnapshot error:", err);
+                    console.error("[FIRESTORE] device watch error:", err);
                 });
 
-                return unsub;
+                return () => {
+                    clearInner();
+                    try { outerUnsub(); } catch (_) { }
+                };
             };
 
             window.subscribeEventsPack = function subscribeEventsPack(cb) {
@@ -518,7 +649,7 @@
                         const src = fromCache ? "firestore:events:realtime-cache" : "firestore:events:realtime-server";
                         window.__flipboardLastSource = src;
 
-                        const pack = parseDoc(snap, src, "events");
+                        const pack = parseEventsDoc(snap, src);
                         cb(pack, src);
                     } catch (err) {
                         console.error("[FIRESTORE] events snapshot parse error:", err);
@@ -548,7 +679,7 @@
     } else {
         window.__FLIPBOARD_BOOTED = true;
 
-        const RUNTIME_VERSION = "1.0.25";
+        const RUNTIME_VERSION = "1.0.34";
         console.log(`[RUNTIME] FlipBoard Display v${RUNTIME_VERSION}`);
 
 
@@ -998,7 +1129,7 @@
         }
 
         /* ============================================================
-           EVENTS / COUNTDOWNS (from Firestore flipboard/events data)
+           EVENTS / COUNTDOWNS (from account-level Firestore events doc)
         ============================================================ */
         let eventsPack = { events: {} };
         let lastEventsJSON = "";
@@ -1018,6 +1149,15 @@
             const dt = new Date(y, mo - 1, d, 0, 0, 0, 0);
             if (dt.getFullYear() !== y || dt.getMonth() !== (mo - 1) || dt.getDate() !== d) return null;
             return dt;
+        }
+
+        function formatEventDateMMDDYYYY(s) {
+            const dt = parseISODateYYYYMMDD(String(s || ""));
+            if (!dt) return "";
+            const mm = String(dt.getMonth() + 1).padStart(2, "0");
+            const dd = String(dt.getDate()).padStart(2, "0");
+            const yyyy = String(dt.getFullYear());
+            return `${mm}/${dd}/${yyyy}`;
         }
 
         function startOfTodayLocal() {
@@ -1051,25 +1191,37 @@
             if (!tail) return null;
 
             const dot = tail.lastIndexOf(".");
-            if (dot <= 0 || dot === tail.length - 1) return null;
+            if (dot <= 0 || dot === tail.length - 1) return "";
 
             const eventKey = tail.slice(0, dot).trim();
             const field = tail.slice(dot + 1).trim().toUpperCase();
 
             const ev = getEventByKeyLoose(eventKey);
-            if (!ev) return placeholderNumeric();
+            if (!ev) {
+                console.log("[EVENTS] missing event key:", eventKey);
+                return "";
+            }
 
-            if (field === "TITLE") return cleanText(ev.title || ev.name || eventKey).toUpperCase();
-            if (field === "DATE") return cleanText(ev.date || "") || placeholderNumeric();
+            if (field === "TITLE") {
+                const value = cleanText(ev.title || ev.name || eventKey).toUpperCase();
+                console.log("[EVENTS] countdown token resolved:", eventKey, field, value);
+                return value;
+            }
+            if (field === "DATE") {
+                const value = formatEventDateMMDDYYYY(ev.date || "");
+                console.log("[EVENTS] countdown token resolved:", eventKey, field, value);
+                return value;
+            }
 
             if (field === "DAYS") {
                 const dt = parseISODateYYYYMMDD(String(ev.date || ""));
-                if (!dt) return placeholderNumeric();
-                const d = daysUntilLocal(dt);
-                return String(Math.max(0, d));
+                if (!dt) return "";
+                const d = String(Math.max(0, daysUntilLocal(dt)));
+                console.log("[EVENTS] countdown token resolved:", eventKey, field, d);
+                return d;
             }
 
-            return placeholderNumeric();
+            return "";
         }
 
         function resolveToken(token, payload, pack, board) {
@@ -1256,6 +1408,16 @@
         function clearPendingTimers() {
             for (const id of pendingTimers) clearTimeout(id);
             pendingTimers = [];
+        }
+
+        function trackTimer(id) {
+            pendingTimers.push(id);
+            return id;
+        }
+
+        function untrackTimer(id) {
+            const idx = pendingTimers.indexOf(id);
+            if (idx !== -1) pendingTimers.splice(idx, 1);
         }
         function cancelBoardWork() {
             clearPendingTimers();
@@ -1658,20 +1820,23 @@
             const flatCells = parseRowsToCells(normalized, COLS, ROWS);
 
             flatCells.forEach((cell, i) => {
-                const id = setTimeout(() => {
+                let id = null;
+                id = trackTimer(setTimeout(() => {
+                    untrackTimer(id);
                     if (epoch !== BOARD_EPOCH) return;
                     const t = tiles[i];
                     if (!t) return;
                     t.setTargetAndColor(cell.ch, cell.color);
-                }, i * STAGGER);
-                pendingTimers.push(id);
+                }, i * STAGGER));
             });
         }
 
         function waitForAllTiles() {
             return new Promise(resolve => {
                 const check = () => {
-                    if (tiles.every(t => !t.running)) resolve();
+                    const timersPending = pendingTimers.length > 0;
+                    const tilesRunning = tiles.some(t => t.running);
+                    if (!timersPending && !tilesRunning) resolve();
                     else requestAnimationFrame(check);
                 };
                 check();
@@ -2255,26 +2420,45 @@
                     console.log("[DEBUG] one_shot flags:", order.map(k => ({ key: k, one_shot: !!bpPack?.boards?.[k]?.one_shot })));
                 }
 
-                // All required startup data is now resolved (or defaulted).
-                isBootReady = true;
-                ANIM_DISABLED = false;
-
                 setStatus("ok", "ready", "ok");
 
-                // Single, clean flip from LOADING screen -> rotation loop (starts at index 0)
+                // Render the first board once during boot, wait for it to finish,
+                // then enter normal rotation after the dwell period. This prevents
+                // the first tile from getting caught mid-flip on initial load.
                 const firstId = (Array.isArray(activeRotationOrder) && activeRotationOrder.length) ? activeRotationOrder[0] : null;
+                const dwell = Number(boardPack.rotation?.dwell_ms || DEFAULT_DWELL_MS);
+
+                ANIM_DISABLED = false;
+                if (firstId) {
+                    cancelBoardWork();
+                    await showStage(firstId);
+                    await waitForAllTiles();
+                }
+
+                // Boot is now complete.
+                isBootReady = true;
+                isInitialBootFlipDone = true;
 
                 // Start weather refresh loop ONLY after boot is ready
                 if (packNeedsWeather(boardPack)) startWeatherRefresh();
                 else stopWeatherRefresh();
 
-                // Start rotation at the FIRST board in rotation. The loop will render index 0 immediately and then dwell.
-                window.__rotationStartIndex = 0;
-                isInitialBootFlipDone = true;
-                startRotation();
-
-                // Attach live Firestore listeners after initial boot completes.
+                // Attach live Firestore listeners only after the initial board is fully settled.
                 attachRealtimeListeners();
+
+                // Honor one-shot behavior for the initial board without mutating the pack itself.
+                if (firstId && isOneShotBoard(boardPack, firstId)) {
+                    activeRotationOrder = activeRotationOrder.filter(id => id !== firstId);
+                }
+
+                if (activeRotationOrder.length) {
+                    const nextIndex = activeRotationOrder.length > 1 && activeRotationOrder[0] === firstId ? 1 : 0;
+                    window.__rotationStartIndex = nextIndex >= activeRotationOrder.length ? 0 : nextIndex;
+                    rotateTimer = setTimeout(() => {
+                        if (!isBootReady) return;
+                        startRotation();
+                    }, dwell);
+                }
 
             } catch (err) {
                 console.error("[BOOT] startup failed:", err);
